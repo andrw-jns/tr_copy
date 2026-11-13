@@ -1,0 +1,887 @@
+## Emergency readmissions within 28 days of discharge
+
+```{r packages, include=FALSE}
+# load required packages
+library(flextable)
+library(ggrepel)
+library(glue)
+library(janitor)
+library(lubridate)
+library(patchwork)
+library(plotly)
+library(readxl)
+library(scales)
+library(StrategyUnitTheme)
+library(stringr)
+library(targets)
+library(tidyverse)
+```
+
+```{r functions}
+source("R/add_covid_box_to_faceted_plot.R")
+source("R/add_covid_box_to_plot.R")
+source("R/create_flextable.R")
+source("R/format_age_group_for_presentation.R")
+source("R/format_as_title.R")
+source("R/format_numbers_for_presentation.R")
+source("R/get_top_n_table.R")
+source("R/highlight_same_top_n.R")
+source("R/plot_age_sex_population_pyramid.R")
+source("R/plot_overlaps.R")
+source("R/plot_rates_funnel.R")
+source("R/plot_rates_funnel_wrapper.R")
+source("R/uprime_calculations.R")
+```
+
+```{r}
+la_lookup <- targets::tar_read(la_lookup)
+```
+
+```{r}
+colours <- c("new" = "#f9bf07", "existing" = "#5881c1")
+```
+
+## Introduction and background
+
+Readmissions within 28 days was the first TPMA to be reviewed in August 2026. Details, analyses and recommendations are provided below.
+
+## Rationale for new or revised indicator
+
+The current TPMA is a relatively simplistic application of the readmissions indicator. There are some caveats and exclusions in up-to-date equivalent national published indicators such as [DHSC fingertips](https://fingertips.phe.org.uk/search/readmission#page/6/gid/1/pat/159/par/K02000001/ati/15/are/E92000001/iid/41101/age/1/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1) that are not incorporated into the current NHP definition.
+
+Additionally, it is felt that a single indicator across all activity and populations does not allow for meaningful discussion around potential mitigating actions.
+
+## Existing code definition (revised indicators only)
+
+The existing TMPA code used in the NHP model is [here](https://fingertips.phe.org.uk/search/readmission#page/6/gid/1/pat/159/par/K02000001/ati/15/are/E92000001/iid/41101/age/1/sex/4/cat/-1/ctp/-1/yrr/1/cid/4/tbm/1).
+
+In short, this captures, for any qualifying index provider spell across a given period, the rate of emergency readmissions per 1,000 population:
+
+- Within 28 days of discharge
+- That is not a 'well baby' admission
+
+## Proposed new or revised code definition
+
+Our proposal is made up of two parts:
+
+1.  Amending and updating the current definition
+2.  Creating additional sub-group breakdowns
+
+### Amending the current TPMA definition
+
+We are proposing to amend the current definition to conform with the fingertips definition as far as practicable. This means:
+
+- Changing the day range to under 30 days i.e. from 28 to 29 inclusive.
+
+- Excluding day case and regular admissions.
+
+- Including for index spells only those discharged on clinical advice.
+
+- Excluding admissions for mental health, cancer or chemotherapy, obstetrics and maternity.
+
+- Excluding both index and readmission spells that include either a transfer in (readmission spell) or transfer out (index spell) from another NHS provider. This is a proxy alternative to creating Continuous Inpatient Spells.
+
+- Remove the well-baby exclusion currently filtered from the prior admissions\*
+
+\* NB. The well-baby adjustment was determined post-analysis and has not been factored into the data as displayed in this report.
+
+### Creating additional sub-group breakdown
+
+To provide additional insights to this indicator we propose to provide the following breakdowns:
+
+1.  Index spell = Elective, Patient aged 0-17
+2.  Index spell = Elective, Patient aged 18-64
+3.  Index spell = Elective, Patient aged 65+
+4.  Index spell = Non-elective, Patient aged 0-17
+5.  Index spell = Non-elective, Patient aged 18-64
+6.  Index spell = Non-elective, Patient aged 65+
+
+This could effectively create 6 new TPMA to replace the existing single TPMA.
+
+## Summary of key points
+
+- The revision of the indicator to a more restrictive set of exclusions as per other national definitions reduces the scale of the TPMA by over 40%.
+- Further disaggregation into distinct groups reduces the volume in some cases (e.g. Elective, 0-17 year readmissions) to potentially small numbers not suitable for application to individual trusts in modelling or smaller geographical units for analysis.
+- The differences in activity rates for the TPMA break-down are driven mostly by the 65+ age group.
+- The overall age-gender profile of the existing and new indicator are almost identical though there is some compression into the working-age category for elective activity.
+- Three of four extreme outliers in the original TPMA are still extreme outliers under the updated definition.
+- Lists of outliers in the six sub-groups are different however, furthering the case for having a more granular view of the mitigable activity.
+- For post-non-elective readmissions, the diagnosis patterns differ by age groups.
+- The highest volume (primary) procedures for all groups are mainly diagnostic. This may be a candidate area for further refinement to the indicator definition / underlying data.
+- The overlaps with other TPMA broadly follows a similar distribution for the combined new indicator, though the sub-groups are different in type and scale of overlap - further justification for more granular analysis.
+
+## Demonstrating the scale of revised TPMA indicator
+
+```{r}
+readmissions_rates <- targets::tar_read(readmissions_rates)
+```
+
+```{r}
+readmission_rates_national_2425 <- readmissions_rates |>
+  dplyr::filter(fyear == "202425", lad23cd == "national")
+
+readmission_rates_national_2425_existing <- readmission_rates_national_2425 |>
+  dplyr::filter(status == "existing", pod == "all") |>
+  dplyr::pull(n)
+
+readmission_rates_national_2425_new <- readmission_rates_national_2425 |>
+  dplyr::filter(status == "new", pod == "all") |>
+  dplyr::pull(n)
+  
+readmission_rates_national_2425_perc_diff <- (readmission_rates_national_2425_existing - readmission_rates_national_2425_new) * 100 / readmission_rates_national_2425_existing
+```
+
+Our existing TPMA indicator returns a total readmission spell volume of `r readmission_rates_national_2425_existing |> format_numbers_for_presentation()` for England in 2024/25.
+
+The revised TPMA indicator returns a total readmission spell volume of `r readmission_rates_national_2425_new |> format_numbers_for_presentation()` for England in 2024/25. This is `r readmission_rates_national_2425_perc_diff |> format_numbers_for_presentation()`% less than the existing indicator.
+
+```{r}
+readmission_rates_national_2425_subgroups <- readmission_rates_national_2425 |>
+  dplyr::filter_out(pod == "all") |>
+  dplyr::select(pod, age_group, n) |>
+  dplyr::mutate(
+    perc = n * 100 / sum(n)
+    )
+```
+
+Looking at the revised TPMA indicator by each of the six subgroups, the majority of readmissions follow an non-elective index spell.
+
+```{r}
+#| label: tbl-overview
+#| tbl-cap: "Number and percentage of emergency readmissions by point of delivery and age group of patient at index spell."
+readmission_rates_national_2425_subgroups |>
+  dplyr::mutate(
+    dplyr::across(dplyr::where(is.numeric),
+                  ~ format_numbers_for_presentation(.)
+                  ),
+    pod = format_as_title(pod),
+    age_group = format_age_group_for_presentation(age_group)
+    ) |>
+  dplyr::rename(number_of_emergency_readmissions = n) |>
+  dplyr::rename_with(~ format_as_title(.)) |>
+  create_flextable()
+```
+
+The number of admissions in 2024/25 for the revised TPMA for patients aged 0-17 years following a elective index spell (`r readmission_rates_national_2425_subgroups |> dplyr::filter(pod == "elective", age_group == "0-17") |> dplyr::summarise(n = sum(n)) |> dplyr::pull(n) |> format_numbers_for_presentation()`) is small compared to other existing TPMA (for example the counts of admissions for TPMA in 23/24: <https://connect.strategyunitwm.nhs.uk/nhp/CPMA_community/_book/mechanism_redirection_substitution.html>). At a smaller geographical level (for example by provider or local authority), when the numbers will be smaller, random variation may make it harder to make fair comparisons between units. So, splitting the activity up into these six subgroups may not be appropriate. An option could be to split by different age groups or to split into only two or three subgroups by splitting by either point of delivery or age group.
+
+### Over time
+
+The difference between standardised rates of admissions under the existing TPMA definition and the revised TPMA definition appears consistent over time.
+
+```{r}
+fyear_levels <- readmissions_rates |>
+  dplyr::select(fyear) |>
+  unique() |>
+  dplyr::arrange(fyear) |>
+  dplyr::pull()
+
+fyear_labels <- fyear_levels
+stringi::stri_sub(fyear_labels, 5, 4) <- "/"
+
+style_readmissions_over_time_plot <- function(plot) {
+  styled <- plot  +
+  ggplot2::labs(
+    x = "Financial year",
+    y = "Admissions per 1000 population \n (age and sex standardised rates)"
+    ) +
+  ggplot2::scale_y_continuous(labels = comma) +
+  StrategyUnitTheme::su_theme() +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5, hjust = 1)
+    )
+  
+  return(styled)
+} 
+```
+
+```{r}
+#| label: fig-number_over_time
+#| fig-cap: "Age and sex standardised rates per 1000 population of admissions over time for the existing and revised TPMA."
+data <- readmissions_rates |>
+  dplyr::filter(pod == "all", lad23cd == "national") |>
+  dplyr::mutate(
+    std_rate = std_rate * 1000,
+    fyear = factor(fyear,
+                   levels = fyear_levels,
+                   labels = fyear_labels
+                   )
+  )
+
+ymax <- max(data$std_rate, na.rm = TRUE)
+
+plot <- data |>
+  ggplot2::ggplot() +
+  ggplot2::aes(x = fyear, y = std_rate, group = status, col = status) +
+  ggplot2::geom_line() +
+  ggplot2::labs(col = "TPMA definition")
+
+plot |>
+  style_readmissions_over_time_plot() |>
+  add_covid_box_to_plot(ymax) +
+  ggplot2::scale_color_manual(
+    values = colours,
+    labels = c("new" = "Revised", "existing" = "Existing")
+    )
+```
+
+The standardised rates of admissions under the new definition of the TPMA by subgroup vary. Rates over time are highest for the non-elective admissions for patients aged 65 plus.
+
+```{r}
+#| label: fig-number_over_time_subgroups
+#| fig-cap: "Age and sex standardised rates per 1000 population of admissions over time for the six subgroups of the revised TPMA."
+data <- readmissions_rates |>
+  dplyr::filter(status == "new", pod != "all", lad23cd == "national") |>
+  dplyr::mutate(
+    std_rate = std_rate * 1000,
+    fyear = factor(fyear,
+                   levels = fyear_levels,
+                   labels = fyear_labels
+                   ),
+    subgroup = glue::glue("{format_as_title(pod)}, {format_age_group_for_presentation(age_group)}")
+  )
+
+ymax <- data |>
+    dplyr::summarise(ymax = max(std_rate, na.rm = TRUE), .by = subgroup)
+
+plot <- data |>
+  ggplot2::ggplot() +
+  ggplot2::aes(x = fyear, y = std_rate, group = subgroup) +
+  ggplot2::geom_line() +
+  ggplot2::facet_wrap(~subgroup,
+                      ncol = 3,
+                      scales = "free_y")
+
+plot |>
+  style_readmissions_over_time_plot() |>
+  add_covid_box_to_faceted_plot(ymax)
+```
+
+### Validation of data definitions - percentage readmission
+
+```{r}
+readmissions_percentage <- targets::tar_read(readmissions_percentage) |>
+  dplyr::select(status, n_numerator, n_denominator, value, lowercl, uppercl) |>
+  dplyr::mutate(
+    value = janitor::round_half_up(value, 1),
+    lowercl = janitor::round_half_up(lowercl, 1),
+    uppercl = janitor::round_half_up(uppercl, 1),
+    dplyr::across(dplyr::where(is.numeric),
+                  ~ format_numbers_for_presentation(.)
+                  ),
+    status = dplyr::case_when(
+      status == "existing" ~ "Existing",
+      status == "new" ~ "Revised",
+      .default = status
+    )
+    )
+```
+
+Part of reviewing the readmissions TPMA was to align it more closely to other existing definitions like the fingertips 'Emergency readmissions within 30 days of discharge from hospital' indicator (<https://fingertips.phe.org.uk/search/readmissions>). The fingertips readmissions indicator is reported as a percentage where:
+
+- the numerator is the number of readmissions for index spells in a financial year.
+- the denominator is the number of index spells in a financial year.
+
+The NHP model uses data that is only available for complete financial years and currently has spells up to 31st March 2025. So since an index spell at the end of a financial year could have a readmission at the start of the next financial year, the latest financial year that we could calculate a similar percentage for the TPMA is 23/24.
+
+In 2023/24, the fingertips indicator was 14.8% with 95% confidence interval (14.8%, 14.8%). This is less than the percentage for the existing TPMA with minimal exclusions (`r readmissions_percentage |> dplyr::filter(status == "Existing") |> dplyr::pull(value)`%) but closer to the percentage for the revised TPMA with the same exclusions (`r readmissions_percentage |> dplyr::filter(status == "Revised") |> dplyr::pull(value)`%). The residual difference may be caused by the remaining key method variation in NHP, that the underlying data is not converted to continuous inpatient spells (CIPS) before processing, but rather single-provider transfer in and out spells are excluded as a proxy.
+
+```{r}
+#| label: tbl-percentage
+#| tbl-cap: "Percentage of index spells in 23/24 that had an emergency readmission using the existing and revised TPMA definitions."
+readmissions_percentage |>
+  dplyr::rename(
+    numerator = n_numerator,
+    denominator = n_denominator,
+    perc = value
+  ) |>
+  dplyr::rename_with(~ format_as_title(.)) |>
+  dplyr::rename(
+    `Lower CL` = Lowercl,
+    `Upper CL` = Uppercl,
+    `TPMA definition` = Status
+  ) |>
+  create_flextable()
+```
+
+Systems already familiar with 'emergency readmissions' are more likely to understand and appreciate the revised TPMA because of this similarity with the fingertips indicator.
+
+\*\*NB. Due to the fact that the NHP processes and purposes determine a retrospective look at readmission activity (identify all potential qualifying readmission spells in a year then screen for any qualifying index spell in the prior 28+ days) and the NHSE approach is prospective (identify all qualifying index spells in a year then screen for qualifying readmissions in subsequent 28+ days) the two figures will never reconcile.
+
+All the following outputs are consistent with the NHP retrospective approach as the NHSE alternative is not currently possible whilst using the annual HES extracts.\*\*
+
+## Comparison of Existing and New TPMA characteristics
+
+### By age and sex
+
+The age and sex population pyramid for admissions in the existing TPMA is top heavy - there are more admissions for older patients. The pyramid also suggest sex differences, especially for patients in the age bands between 15 and 50 years. There is little difference between the overall shape of the pyramid for admissions for the revised TPMA compared to the existing TPMA.
+
+```{r}
+readmissions_age_sex <- targets::tar_read(readmissions_age_sex)
+```
+
+```{r}
+#| label: fig-pyramid-existing
+#| fig-cap: "Age and sex population pyramid for the existing TPMA."
+readmissions_age_sex |>
+  dplyr::filter(pod == "all") |>
+  plot_age_sex_population_pyramid()  +
+  ggplot2::facet_wrap(
+    ~status, 
+    scales = "free_x",
+    labeller = ggplot2::as_labeller(
+      c("new" = "Revised", 
+        "existing" = "Existing"
+      ))
+  )
+```
+
+Admissions under the revised TPMA definition appear to have different age-sex structures when splitting by point of delivery. For example, in the 65 plus age group, there are fewer sex differences for the elective subgroup compared to the elective subgroup.
+
+```{r}
+#| label: fig-pyramid-new
+#| fig-cap: "Age and sex population pyramid for the revised TPMA by point of delivery. Age subgroups are indicated by dashed horizontal lines."
+readmissions_age_sex |>
+  dplyr::filter(status == "new", pod != "all") |>
+  dplyr::filter(abs(n) >= 10) |>
+  plot_age_sex_population_pyramid() +
+  ggplot2::facet_wrap(~format_as_title(pod), scales = "free_x") +
+  ggplot2::geom_hline(yintercept = 14.5, linetype = "dashed") +
+  ggplot2::geom_hline(yintercept = 4.5, linetype = "dashed")
+```
+
+### Variation across the country (LAD's)
+
+```{r}
+plot_rates_funnel_readmissions <- function(data, 
+                                           status_readm, 
+                                           pod_readm,
+                                           age_group_readm
+                                           ) {
+  plot <- readmissions_rates |>
+    dplyr::filter(status == status_readm, 
+                  fyear == 202425, 
+                  pod == pod_readm, 
+                  age_group == age_group_readm
+                  ) |>
+    dplyr::mutate(std_rate = std_rate * 1000) |>
+    dplyr::left_join(la_lookup, "lad23cd") |>
+    plot_rates_funnel_wrapper() +
+  ggplot2::labs(y = "Admissions per 1000 population \n (age and sex standardised rates)")
+  
+  return(plot)
+}
+```
+
+For admissions in 24/25 under the existing TPMA definition, there are five outliers: four local authorities have higher standardised rates of admissions and one local authority has lower rates. Using the revised TPMA definition, there are six local authorities identified as outliers with higher standardised rates of admissions.
+
+::: panel-tabset
+#### Existing TPMA
+
+```{r}
+#| label: fig-funnel-existing
+#| fig-cap: "Funnel plot of age and sex standardised rates for admissions in 2024/25 using the existing TPMA definition."
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "existing",
+                               "all",
+                               "all"
+)
+```
+
+#### Revised TPMA
+
+```{r}
+#| label: fig-funnel-new
+#| fig-cap: "Funnel plot of age and sex standardised rates for admissions in 2024/25 using the revised TPMA definition."
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "all",
+                               "all"
+)
+```
+:::
+
+For admissions in 24/25 under the revised TPMA definition, none of the subgroups have the same outliers as under the existing TPMA definition or as other subgroups. All subgroups have outliers with higher standardised rates of admissions. Only admissions for patients aged between 0-17 and 65 plus years following an non-elective index spell have an outlier with a lower standardised rate of admissions.
+
+::: panel-tabset
+```{r}
+get_funnel_plot_caption <- function(pod, age_group) {
+  caption <- glue::glue("Funnel plot of age and sex standardised rates for {pod} admissions in 2024/25 for patients aged {age_group} years using the revised TPMA definition.")
+}
+```
+
+#### Elective, age 0-17 years
+
+```{r}
+#| label: fig-funnel-elective-0-17
+#| fig-cap: !expr get_funnel_plot_caption("elective", "0-17")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "elective",
+                               "0-17"
+                               )
+```
+
+#### Elective, age 18-64 years
+
+```{r}
+#| label: fig-funnel-elective-18-64
+#| fig-cap: !expr get_funnel_plot_caption("elective", "18-64")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "elective",
+                               "18-64"
+                               )
+```
+
+#### Elective, age 65 plus years
+
+```{r}
+#| label: fig-funnel-elective-65-plus
+#| fig-cap: !expr get_funnel_plot_caption("elective", "65 plus")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "elective",
+                               "65_plus")
+```
+
+#### Non-elective, age 0-17 years
+
+```{r}
+#| label: fig-funnel-non-elective-0-17
+#| fig-cap: !expr get_funnel_plot_caption("non-elective", "0-17")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "non_elective",
+                               "0-17"
+                               )
+```
+
+#### Non-elective, age 18-64 years
+
+```{r}
+#| label: fig-funnel-non-elective-18-64
+#| fig-cap: !expr get_funnel_plot_caption("non-elective", "18-64")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "non_elective",
+                               "18-64"
+                               )
+```
+
+#### Non-elective, age 65 plus years
+
+```{r}
+#| label: fig-funnel-non-elective-65-plus
+#| fig-cap: !expr get_funnel_plot_caption("non-elective", "65 plus")
+plot_rates_funnel_readmissions(readmissions_rates,
+                               "new",
+                               "non_elective",
+                               "65_plus")
+```
+:::
+
+### Key diagnoses for readmission
+
+The primary diagnosis 'Other sepsis' is in the top 6 for admissions under the existing TPMA, but not the revised TPMA definition. Otherwise, the top six primary diagnoses are similar.
+
+```{r}
+readmissions_top_n <- targets::tar_read(readmissions_top_n)
+
+readmission_top_n_diagnosis <- readmissions_top_n |>
+  dplyr::filter(type == "diagnosis") |>
+  dplyr::rename(description = diagnosis_description)
+
+readmission_top_n_procedure <- readmissions_top_n |>
+  dplyr::filter(type == "procedure") |>
+  dplyr::rename(description = procedure_description)
+```
+
+::: panel-tabset
+#### Existing TPMA
+
+```{r}
+#| label: tbl-top-n-diagnosis-existing
+#| tbl-cap: "The top six primary diagnoses for admissions in 2024/25 using the existing TPMA definition."
+readmissions_top_n_existing <- readmission_top_n_diagnosis |>
+  dplyr::filter(status == "existing")
+
+top_n_existing_codes <- readmissions_top_n_existing |> 
+  dplyr::filter(description != "Other") |> 
+  dplyr::select(description) |> 
+  dplyr::pull()
+
+readmissions_top_n_existing |>
+  get_top_n_table()
+```
+
+#### Revised TPMA
+
+```{r}
+#| label: tbl-top-n-diagnosis-new
+#| tbl-cap: "The top six primary diagnoses for admissions in 2024/25 using the revised TPMA definition. Primary diagnoses that also appear in the top six for the existing TPMA definition have been highlighted."
+readmission_top_n_diagnosis |>
+  dplyr::filter(status == "new", pod == "all") |>
+  get_top_n_table() |>
+  highlight_same_top_n()
+```
+:::
+
+```{r}
+get_top_n_table_caption <- function(pod, age_group, type) {
+  caption <- glue::glue("The top six primary {type} for {pod} admissions in 2024/25 for patients aged {age_group} years using the revised TPMA definition. Primary {type} that also appear in the top six for the existing TPMA definition have been highlighted.")
+}
+
+# Below is `get_top_n_table()` with some amendments to handle the subgroups of readmission - for example showing columns for age group.
+get_readmissions_top_n_table <- function(data) {
+  n <- data |>
+    dplyr::filter(description != "Other") |>
+    nrow()
+  
+  table <- data |>
+    dplyr::select(
+      description,
+      n,
+      perc
+    ) |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::where(is.numeric),
+        ~ format_numbers_for_presentation(.)
+      ),
+      dplyr::across(dplyr::any_of("pod"), ~ format_as_title(.)),
+      dplyr::across(
+        dplyr::any_of("age_group"),
+        ~ format_age_group_for_presentation(.)
+      )
+    ) |>
+    dplyr::rename(number_of_admissions = n) |>
+    dplyr::rename_with( ~ format_as_title(.)) |>
+    create_flextable() |>
+    flextable::hline(i = n, border = flextable::fp_border_default()) |>
+    flextable::hline(i = (n + 1),
+                     border = flextable::fp_border_default(width = 3)) |>
+    highlight_same_top_n()
+  
+  return(table)
+}
+```
+
+'Other Sepsis' also does not appear in any of the top six primary diagnoses for each subgroup.
+
+The diagnosis 'Unknown and unspecified causes of morbidity' appears in five of the subgroups (it does not appear in 'Elective, age 0-17 years'), suggesting that this diagnosis is an important factor in this TPMA across age groups and point of delivery.
+
+The 'Elective, age 0-17 years' subgroup has the fewest number of primary diagnoses that overlap with the existing TPMA. This is probably due to this group having a smaller number of admissions in 24/25 compared to the other subgroups.
+
+::: panel-tabset
+#### Elective, age 0-17 years
+
+```{r}
+#| label: tbl-top-n-diagnosis-elective-0-17
+#| tbl-cap: !expr get_top_n_table_caption("elective", "0-17", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "elective", age_group == "0-17") |>
+  get_readmissions_top_n_table()
+```
+
+#### Elective, age 18-64 years
+
+```{r}
+#| label: tbl-top-n-diagnosis-elective-18-64
+#| tbl-cap: !expr get_top_n_table_caption("elective", "18-64", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "elective", age_group == "18-64") |>
+  get_readmissions_top_n_table()
+```
+
+#### Elective, age 65 plus years
+
+```{r}
+#| label: tbl-top-n-diagnosis-elective-65-plus
+#| tbl-cap: !expr get_top_n_table_caption("elective", "65 plus", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "elective", age_group == "65_plus") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 0-17 years
+
+```{r}
+#| label: tbl-top-n-diagnosis-non-elective-0-17
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "0-17", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "non_elective", age_group == "0-17") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 18-64 years
+
+```{r}
+#| label: tbl-top-n-diagnosis-non-elective-18-64
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "18-64", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "non_elective", age_group == "18-64") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 65 plus years
+
+```{r}
+#| label: tbl-top-n-diagnosis-non-elective-65-plus
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "65 plus", "diagnoses")
+readmission_top_n_diagnosis |>
+  dplyr::filter(pod == "non_elective", age_group == "65_plus") |>
+  get_readmissions_top_n_table()
+```
+:::
+
+### Key procedures within readmission
+
+The top six primary procedures for admissions under the existing and revised TPMA definition are similar.
+
+::: panel-tabset
+#### Existing TPMA
+
+```{r}
+#| label: tbl-top-n-procedure-existing
+#| tbl-cap: "The top six primary procedures for admissions in 2024/25 using the existing TPMA definition."
+readmissions_top_n_existing <- readmission_top_n_procedure |>
+  dplyr::filter(status == "existing")
+
+top_n_existing_codes <- readmissions_top_n_existing |> 
+  dplyr::filter(description != "Other") |> 
+  dplyr::select(description) |> 
+  dplyr::pull()
+
+readmissions_top_n_existing |>
+  get_top_n_table()
+```
+
+#### Revised TPMA
+
+```{r}
+#| label: tbl-top-n-procedure-new
+#| tbl-cap: "The top six primary procedures for admissions in 2024/25 using the revised TPMA definition. Primary procedures that also appear in the top six for the existing TPMA definition have been highlighted."
+readmission_top_n_procedure |>
+  dplyr::filter(status == "new", pod == "all") |>
+  get_top_n_table() |>
+  highlight_same_top_n()
+```
+:::
+
+Each of the top six primary procedures for admissions in 2024/25 using the existing TPMA definition appears in at least two of the top six primary procedures for admissions in the revised TPMA definition subgroups.
+
+Primary procedure 'Diagnostic imaging procedures' appears in each subgroup and 'Diagnostic imaging of central nervous system' appears in five of the subgroups.
+
+The ‘Elective, age 0-17 years’ subgroup has the fewest number of primary procedures that overlap with the existing TPMA. This is probably due to this group having a smaller number of admissions in 24/25 compared to the other subgroups.
+
+::: panel-tabset
+#### Elective, age 0-17 years
+
+```{r}
+#| label: tbl-top-n-procedure-elective-0-17
+#| tbl-cap: !expr get_top_n_table_caption("elective", "0-17", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "elective", age_group == "0-17") |>
+  get_readmissions_top_n_table()
+```
+
+#### Elective, age 18-64 years
+
+```{r}
+#| label: tbl-top-n-procedure-elective-18-64
+#| tbl-cap: !expr get_top_n_table_caption("elective", "18-64", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "elective", age_group == "18-64") |>
+  get_readmissions_top_n_table()
+```
+
+#### Elective, age 65 plus years
+
+```{r}
+#| label: tbl-top-n-procedure-elective-65-plus
+#| tbl-cap: !expr get_top_n_table_caption("elective", "65 plus", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "elective", age_group == "65_plus") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 0-17 years
+
+```{r}
+#| label: tbl-top-n-procedure-non-elective-0-17
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "0-17", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "non_elective", age_group == "0-17") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 18-64 years
+
+```{r}
+#| label: tbl-top-n-procedure-non-elective-18-64
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "18-64", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "non_elective", age_group == "18-64") |>
+  get_readmissions_top_n_table()
+```
+
+#### Non-elective, age 65 plus years
+
+```{r}
+#| label: tbl-top-n-procedure-non-elective-65-plus
+#| tbl-cap: !expr get_top_n_table_caption("non-elective", "65 plus", "procedures")
+readmission_top_n_procedure |>
+  dplyr::filter(pod == "non_elective", age_group == "65_plus") |>
+  get_readmissions_top_n_table()
+```
+:::
+
+### Overlap with other TPMA
+
+The number of admissions under the revised TPMA definition that overlap with other TPMA are broadly similar to those under the existing TPMA definition.
+
+```{r}
+readmissions_overlaps <- targets::tar_read(readmissions_overlaps) 
+
+get_overlap_caption <- function(pod, age_group) {
+  glue::glue("The percentage of {pod} admissions for patients aged {age_group} years for the revised emergency readmissions TPMA definition that are also associated with other TPMA. Values of less than 1% have not been plotted.")
+}
+```
+
+```{r}
+#| label: fig-overlaps-existing
+#| fig-cap: "The percentage of admissions for the existing emergency readmissions TPMA definition that are also associated with other TPMA. A blue dot is used to show the percentage for the admissions under the existing TPMA definition. Values of less than 1% have not been plotted."
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "all") |>
+  plot_overlaps()
+```
+
+Subgroups notes:
+
+- Overlap with prevention TPMA least - all less than 9%
+- 'Admissions with Mental Health Comorbidities' - high across all - ranges from 'Non-elective, age 0-17 years' at 14% to 'Non-elective, age 18-64 years' at 39%
+- 'Short Stay Admissions with No Procedure' - high across all - ranges from 'Non-elective, age 65 plus years' at 18% to 'Non-elective, age 0-17 years' at 40%
+- Overlaps with 'Long Stays for Older People', 'Frailty Admissions (High Frailty Risk)' and 'Frailty Admissions (High Frailty Risk)' are high for 65 plus subgroups
+
+::: panel-tabset
+```{r}
+# This is a variation of `plot_overlaps()` so can easily repeat plot for each subgroup.
+plot_overlaps_subgroups <- function(data) {
+  xmax <- max(data$perc, na.rm = TRUE) * 1.2
+  
+  plot <- data |>
+    dplyr::filter(!is.na(n), perc >= 1) |>
+    ggplot2::ggplot() +
+    ggplot2::aes(x = perc, y = reorder(tpma_full_name, perc), fill = status) +
+    ggplot2::geom_col(position = ggplot2::position_dodge(1)) +
+    ggplot2::geom_text(ggplot2::aes(
+      label = glue::glue("{perc}% ({prettyNum(n, big.mark = ',')})")),
+      hjust = -0.1, 
+      size = 2.8
+    ) +
+    ggplot2::facet_wrap(~tpma_mechanism, ncol = 1, scales = "free_y") +
+    ggplot2::xlim(0, xmax) +
+    ggplot2::labs(x = "Percentage of emergency readmissions",
+                  y = "TPMA") +
+    StrategyUnitTheme::su_theme() +
+    StrategyUnitTheme::scale_fill_su() +
+    ggplot2::theme(legend.position = "none")
+  
+  return(plot)
+}
+```
+
+#### Elective, age 0-17 years
+
+```{r}
+#| label: fig-overlaps-elective-0-17
+#| fig-cap: !expr get_overlap_caption("elective", "0-17")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "elective", age_group == "0-17") |>
+  plot_overlaps_subgroups()
+```
+
+#### Elective, age 18-64 years
+
+```{r}
+#| label: fig-overlaps-elective-18-64
+#| fig-cap: !expr get_overlap_caption("elective", "18-64")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "elective", age_group == "18-64") |>
+  plot_overlaps_subgroups()
+```
+
+#### Elective, age 65 plus years
+
+```{r}
+#| label: fig-overlaps-elective-65-plus
+#| fig-cap: !expr get_overlap_caption("elective", "65 plus")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "elective", age_group == "65_plus") |>
+  plot_overlaps_subgroups()
+```
+
+#### Non-elective, age 0-17 years
+
+```{r}
+#| label: fig-overlaps-non-elective-0-17
+#| fig-cap: !expr get_overlap_caption("non-elective", "0-17")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "non_elective", age_group == "0-17") |>
+  plot_overlaps_subgroups()
+```
+
+#### Non-elective, age 18-64 years
+
+```{r}
+#| label: fig-overlaps-non-elective-18-64
+#| fig-cap: !expr get_overlap_caption("non-elective", "18-64")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "non_elective", age_group == "18-64") |>
+  plot_overlaps_subgroups()
+```
+
+#### Non-elective, age 65 plus years
+
+```{r}
+#| label: fig-overlaps-non-elective-65-plus
+#| fig-cap: !expr get_overlap_caption("non-elective", "65 plus")
+#| fig-height: 7
+#| fig-width: 11
+readmissions_overlaps |>
+  dplyr::filter(pod == "non_elective", age_group == "65_plus") |>
+  plot_overlaps_subgroups()
+```
+:::
+
+## Summary and Recommendations for NHP development board
+
+The NHP Model Development Board are asked to consider the following recommendations, noting the implications for NHP schemes, other NHP model users, and users of the TPMA explorer.
+
+1\. The TPMA definition should be updated to match the national guidance as far as possible. This will entail (a) changing the day range from 'within 28 days' to 'within 30 days', (b) excluding readmissions following a day case or a regular attendance, (c) limiting index spells to those discharged on clinical advice, (d) excluding readmission for mental health, cancer, chemotherapy, obstetrics and maternity, and (e) excluding certain spells that are components of a continuous inpatient spell.
+
+2\. Four TPMA subtypes should be created to allow users to make more tailored avoidance assumptions. These would be (a) a readmission following an elective spell, (b) a readmission of a child (\< 18 yrs) following a non-elective spell, (c) a readmission of a working aged adult (18-64 yrs) following a non-elective spell, and (d) a readmission of an older adult (65+ yrs) following a non-elective spell
+
+Other considerations
+
+A number of other issues arose during the review that relate to the way in which the most frequent patient diagnoses and procedures are presented in the NHP Inputs and TPMA Explorer apps. These thoughts are offered for consideration, but do not directly impact on the recommended changes to the readmissions TPMA set out above.
+
+3\. When reporting the most frequently occurring diagnoses and procedures for a given TPMA, in the NHP Inputs and TPMA Explorer apps, might it be beneficial to provide the number of distinct diagnoses / procedures that are covered in the 'other category'? This could be achieved by adding (n = …) after the text ‘other’ in the tables?
+
+4\. The NHP Inputs and TPMA Explorer apps currently present information on the top 6 primary procedures for a given TPMA. Might it be more useful to provide the top 6 procedures (in any position)? In addition, should the apps distinguish between diagnostic and other procedures?
+
+5\. In addition to information about the diagnoses and procedures in the readmission spells, there may be value in providing information about the most frequently occurring diagnoses and procedures in the index spells.
+
+6\. Once the NHP data infrastructure has moved from annual HES to a more contemporary and accessible source e.g. SUS, that the issue of retrospective versus prospective capture of readmissions is revisited to complete the alignment with NHSE methods.

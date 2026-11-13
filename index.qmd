@@ -1,0 +1,16 @@
+# Preface {.unnumbered}
+
+The project comprises a structured review of the existing Types of Potentially Mitigable Activity (TPMAs), assessing their evidence base, definitions, modelling approach and potential for further improvement, while identifying and prioritising opportunities to develop new TPMAs. Examples of these development opportunities are set out in the table below.
+
+```{r}
+source("R/create_flextable.R")
+
+readxl::read_excel("reference_data/preface_table.xlsx") |>
+  create_flextable() |>
+  flextable::hline() |>
+  flextable::padding(padding = 5, part = "body")
+```
+
+Proposed developments will be subject to analysis to assess their methodological robustness and potential impact on the model. The analysis will inform a recommendation on whether the proposed development should be incorporated into the model, whether further analysis or development is required before a decision can be made, or whether the proposed development should not be taken forward.
+
+The analysis of each TPMA development opportunity is presented in a separate chapter. These chapters can be accessed from the sidebar on the left and are arranged chronologically by date.

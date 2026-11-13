@@ -1,0 +1,465 @@
+## Mean delayed discharge
+
+```{r}
+source("R/create_flextable.R")
+source("R/format_as_title.R")
+source("R/format_numbers_for_presentation.R")
+source("R/get_financial_year_from_YYYYMM.R")
+source("R/get_top_n_table.R")
+source("R/plot_age_sex_population_pyramid.R")
+```
+
+```{r}
+plot_mean_delay_by_month_and_group <- function(data, group_column, legend_title) {
+  plot <- data |>
+    ggplot2::ggplot() +
+    ggplot2::aes(
+      x = month, 
+      y = mean, 
+      group = !!rlang::sym(group_column), 
+      col = !!rlang::sym(group_column)
+    ) +
+    ggplot2::geom_line() +
+    ggplot2::labs(
+      x = "Month",
+      y = "Mean delayed days",
+      col = legend_title
+    ) +
+    ggplot2::scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+    ggplot2::scale_y_continuous(labels = scales::comma) +
+    StrategyUnitTheme::su_theme() +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5, hjust = 1)
+    )
+  
+  return(plot)
+}
+```
+
+## Introduction and background
+
+... To be reviewed in October 2026. Details, analyses and recommendations are provided below.
+
+## Rationale for new or revised indicator
+
+The model does not currently identify inpatient activity occurring after a patient is ready for discharge as a distinct efficiency opportunity. The availability of Discharge Ready Date in HES provides an opportunity to identify and quantify potentially avoidable bed days between a patient becoming ready for discharge and their actual discharge, using a methodology aligned with the NHS England approach. This differs from existing approaches, which either identify activity exceeding an expected length of stay, such as HRG trim points, or use broader criteria to identify activity where there may be scope to reduce length of stay, rather than directly identifying the period following readiness for discharge. 
+
+Reference: NHS England, Discharge Ready Date (DRD) guidance and scenarios, updated 20 August 2026. [NHS England DRD guidance](https://www.england.nhs.uk/long-read/discharge-ready-date-drd-guidance-and-scenarios/)
+
+## Discharge ready date data quality
+
+Following guidance from the Better Care Fund for handling [discharge ready dates](https://mg.wakefield.gov.uk/documents/s136888/13d%20BCF%20Metrics%20Handbook.pdf), admissions were excluded if:
+
+- the patient was under 16 years old.
+- the length of stay was 0 days.
+- the method of admission was other than elective or emergency.
+- the patient died in hospital or was transferred to other hospitals/hospices.
+- the treatment function groups was not "specific acute" as defined by [NHSE in 23/24](https://www.england.nhs.uk/london/wp-content/uploads/sites/2/2023/12/Specific_Acute_TFC.pdf).
+
+After applying these exclusions a few data quality issues were found with the discharge ready date data.
+
+### Null discharge ready dates and time series of data
+```{r}
+discharge_ready_date_complete <- targets::tar_read(discharge_ready_date_complete)
+
+discharge_ready_date_complete_fy <- discharge_ready_date_complete |>
+  dplyr::mutate(fyear = get_financial_year_from_YYYYMM(der_activity_month)) |>
+  dplyr::summarise(
+    has_disreadydate = sum(has_disreadydate),
+    number_spells = sum(number_spells),
+    .by = c(fyear, source)
+    ) |>
+  PHEindicatormethods::phe_proportion(
+    x = has_disreadydate,
+    n = number_spells,
+    multiplier = 100
+  )
+
+total_2425_qualifying_admissions <- discharge_ready_date_complete_fy |>
+  dplyr::filter(source == "hes", fyear == 202425) |> 
+  dplyr::pull(number_spells)
+```
+
+In 2024/25, there were 
+`r total_2425_qualifying_admissions |> format_numbers_for_presentation()` 
+admissions in HES that could have a discharge ready date using the above criteria. Of these admissions, 
+`r discharge_ready_date_complete_fy |> dplyr::filter(source == "hes", fyear == 202425) |> dplyr::pull(value) |> format_numbers_for_presentation()`% 
+had a discharge ready date and the remaining 
+`r (100 - discharge_ready_date_complete_fy |> dplyr::filter(source == "hes", fyear == 202425) |> dplyr::pull(value)) |> format_numbers_for_presentation()`% 
+were NULL.
+
+[NHS England DRD guidance](https://www.england.nhs.uk/long-read/discharge-ready-date-drd-guidance-and-scenarios/) requires providers to leave the discharge ready date field in data submissions as blank (NULL) when:
+
+1. the patient self-discharges against clinical advice. 
+1. the patient is transferred to another provider. 
+
+The discharge ready date field can also be left blank when (3.) the date of discharge is the same. Discharge method and destination can be used to exclude cases when 1. or 2. applies, so the guidance treats the remaining NULLs as if 3. applies - the date of discharge is used in place of discharge ready date. This principle is applied to later analyses.
+
+Discharge ready dates are available from September 2023. Since, HES data covers spells up to the end of 2024/25, a new TPMA based on discharge ready dates would not have enough data for a time series by financial year, since it would only have data for 2024/25. This may affect tools like the TPMA explorer or work supporting schemes to provide TPMA estimates.
+
+At a monthly level, the percentage of completed discharge ready dates has increased over time. Percentages of completeness are similar between HES and SUS datasets. The trend appears to continue in SUS data so we could expect similar in HES data once available.
+
+```{r}
+#| label: fig-number_complete_over_time
+#| fig-cap: "Percentage of admissions with completed discharge ready date over time and by data source."
+discharge_ready_date_complete |>
+  dplyr::mutate(source = stringr::str_to_upper(source)) |>
+  ggplot2::ggplot() +
+  ggplot2::aes(x = month,
+               y = value,
+               group = source,
+               col = source
+               ) +
+  ggplot2::geom_line() +
+  ggplot2::labs(
+    x = "Month of discharge",
+    y = "Percentage of admissions with a discharge ready date",
+    col = "Data source"
+    ) +
+  ggplot2::scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  ggplot2::scale_y_continuous(labels = scales::comma) +
+  StrategyUnitTheme::su_theme() +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5, hjust = 1)
+    )
+```
+
+### Negative delays
+
+```{r}
+hes_discharge_ready_date_negative <- targets::tar_read( hes_discharge_ready_date_negative)
+
+total_negative <- hes_discharge_ready_date_negative |>
+  dplyr::summarise(n = sum(number_spells)) |>
+  dplyr::pull(n)
+
+mean_negative_delay <- hes_discharge_ready_date_negative |>
+  tidyr::uncount(number_spells) |>
+  dplyr::summarise(
+    mean = mean(delay_duration),
+    sd = sd(delay_duration)
+    ) 
+
+number_negative_one <- hes_discharge_ready_date_negative |>
+  dplyr::filter(delay_duration == -1) |>
+  dplyr::summarise(n = sum(number_spells)) |>
+  dplyr::pull(n)
+
+number_within_negative_100 <- hes_discharge_ready_date_negative |>
+  dplyr::filter(delay_duration >= -100) |>
+  dplyr::summarise(n = sum(number_spells)) |>
+  dplyr::pull(n)
+```
+
+In 2024/25, there were 
+`r total_negative |> format_numbers_for_presentation()` 
+spells 
+(`r (total_negative * 100 / total_2425_qualifying_admissions) |> format_numbers_for_presentation()`%)
+in HES with a discharge ready date after the discharge date. Of these spells:
+
+- the discharge ready date was on average 
+`r mean_negative_delay |> dplyr::pull(mean) |> abs() |> format_numbers_for_presentation()` 
+days (standard deviation 
+`r mean_negative_delay |> dplyr::pull(sd) |> format_numbers_for_presentation()`) 
+after the discharge date.
+- `r number_negative_one |> format_numbers_for_presentation()` (`r (number_negative_one * 100 / total_negative) |> format_numbers_for_presentation()`%)
+had a discharge ready date one day after the discharge date.
+
+It is assumed that this is due to data quality issues and so in later analyses when the discharge ready date is after the discharge date the discharge date is used instead.
+
+### Improbable discharge ready dates
+
+```{r}
+hes_early_discharge_ready_dates <- targets::tar_read(hes_early_discharge_ready_dates)
+```
+
+In 2024/25, `r hes_early_discharge_ready_dates |> dplyr::summarise(sum(number_spells)) |> dplyr::pull() |> format_numbers_for_presentation()` admissions had a discharge ready date recorded as "1900-01-01". This affects admissions over a few months:
+
+```{r}
+hes_early_discharge_ready_dates |>
+  dplyr::arrange(month) |>
+  dplyr::mutate(month = format(month, "%B %Y")) |>
+  dplyr::select(Month = month, `Number of admissions with \n discharge ready date 1900-01-01` = number_spells) |>
+  create_flextable()
+```
+
+These improbable discharge ready dates are replaced with the discharge date.
+
+### Outliers
+
+```{r}
+hes_discharge_ready_date_outliers <- targets::tar_read(hes_discharge_ready_date_outliers)
+
+cumulative_delay <- hes_discharge_ready_date_outliers |>
+  dplyr::summarise(number_spells = sum(number_spells), .by = delay_duration) |>
+  dplyr::arrange(delay_duration) |>
+  dplyr::mutate(cumulative_delay = cumsum(number_spells / sum(number_spells)))
+
+delay_duration_cap <- cumulative_delay |> 
+  dplyr::filter(cumulative_delay <= 0.9999) |> 
+  dplyr::summarise(max(delay_duration)) |> 
+  dplyr::pull()
+
+mean_delay_duration <- hes_discharge_ready_date_outliers |>
+  tidyr::uncount(number_spells) |>
+  dplyr::summarise(mean = mean(delay_duration), sd = sd(delay_duration))
+```
+
+In 2024/25, the mean duration of delay was 
+`r mean_delay_duration |> dplyr::pull(mean) |> format_numbers_for_presentation()` 
+days (standard deviation `r mean_delay_duration |> dplyr::pull(sd) |> format_numbers_for_presentation()`) and 99.99% of admissions with a discharge ready date had a delay of 
+`r delay_duration_cap |> format_numbers_for_presentation()`
+days or less. There were 
+`r cumulative_delay |> dplyr::filter(cumulative_delay > 0.9999) |> dplyr::summarise(sum(number_spells)) |> dplyr::pull() |> format_numbers_for_presentation()` 
+admissions with delays longer than this, ranging from 
+`r cumulative_delay |> dplyr::filter(cumulative_delay > 0.9999) |> dplyr::summarise(min(delay_duration)) |> dplyr::pull() |> format_numbers_for_presentation()` 
+to 
+`r cumulative_delay |> dplyr::filter(cumulative_delay > 0.9999) |> dplyr::summarise(max(delay_duration)) |> dplyr::pull() |> format_numbers_for_presentation()` 
+days.
+
+These longer durations of delay may be due to data quality issues and so in these cases the duration of the delay was capped at `r delay_duration_cap |> format_numbers_for_presentation()` days.
+
+## Proposed new or revised code definition
+
+1. Exclude admissions where: 
+    - the patient was under 16 years old.
+    - the length of stay was 0 days.
+    - the method of admission was other than elective or emergency.
+    - the patient died in hospital or was transferred to other hospitals/hospices.
+    - the treatment function groups was not "specific acute" as defined by [NHSE in 23/24](https://www.england.nhs.uk/london/wp-content/uploads/sites/2/2023/12/Specific_Acute_TFC.pdf).
+2. Derive discharge ready date by: 
+    - replacing NULL discharge ready dates with the discharge date.
+    - replacing discharge ready dates that happen after the discharge date with the discharge date.
+    - replace discharge ready dates recorded as "1900-01-01" with the discharge date.
+3. Calculate the delay duration as the number of days between the discharge ready date and the discharge date.
+4. Cap delay durations at `r delay_duration_cap |> format_numbers_for_presentation()` days.
+5. Calculate the mean delay duration.
+
+## Summary of key points
+
+...
+
+## Demonstrating the scale of new TPMA indicator
+
+```{r}
+mean_delayed_discharge_scale_2425 <- targets::tar_read(mean_delayed_discharge_scale_2425)
+
+delayed_discharge_non_zero <- targets::tar_read(delayed_discharge_non_zero)
+
+delayed_discharge_non_zero_all <- delayed_discharge_non_zero |>
+  dplyr::summarise(
+    n = sum(count),
+    .by = non_zero_delay
+    ) |>
+  dplyr::mutate(perc = n * 100 / sum(n))
+```
+
+For the 
+`r mean_delayed_discharge_scale_2425 |> dplyr::pull(n) |> format_numbers_for_presentation()` 
+admissions in 2024/25 that qualified for a delayed discharge assessment, there was a total of 
+`r mean_delayed_discharge_scale_2425 |> dplyr::pull(total) |> format_numbers_for_presentation()` 
+days between the discharge ready date and the discharge date spent in hospital. So on average, each hospital admission had a delayed duration of 
+`r mean_delayed_discharge_scale_2425 |> dplyr::pull(mean) |> format_numbers_for_presentation()` 
+days. Of admissions in 2024/25, 
+`r delayed_discharge_non_zero_all |> dplyr::filter(non_zero_delay == 0) |> dplyr::pull(perc) |> format_numbers_for_presentation()`% 
+were discharged on their discharge ready date.
+
+### Over time
+
+The mean duration of delay has increased over the months. This may reflect the increasing completion rate of the discharge ready date column in the data since it is a similar pattern to @fig-number_complete_over_time. More time and data may be required to see if this stabilises before using the data as a baseline year in the model.
+
+```{r}
+#| label: fig-scale
+#| fig-cap: "The average duration of delay for hospital admissions by month."
+mean_delayed_discharge_month <- targets::tar_read(mean_delayed_discharge_month)
+
+mean_delayed_discharge_month |>
+  ggplot2::ggplot() +
+  ggplot2::aes(x = month, y = mean, group = 1) +
+  ggplot2::geom_line() +
+  ggplot2::labs(
+    x = "Month",
+    y = "Mean delayed days"
+  ) +
+  ggplot2::scale_x_date(date_labels = "%b %Y", date_breaks = "1 month") +
+  ggplot2::scale_y_continuous(labels = scales::comma) +
+  StrategyUnitTheme::su_theme() +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5, hjust = 1)
+  )
+```
+
+## New TPMA characteristics
+
+...
+
+### By age and sex
+
+The mean duration of delay increases with age.
+
+```{r}
+#| label: fig-pyramid
+#| fig-cap: "Age and sex population pyramid for the new TPMA."
+mean_delayed_discharge_age_sex <- targets::tar_read(mean_delayed_discharge_age_sex)
+
+mean_delayed_discharge_age_sex |>
+  plot_age_sex_population_pyramid() +
+  ggplot2::labs(x = "Mean duration of delay")
+```
+
+### By specialty group (medical, surgical, other)
+
+```{r}
+delayed_discharge_non_zero_specialty_group <- delayed_discharge_non_zero |>
+  dplyr::summarise(
+    n = sum(count),
+    .by = c(non_zero_delay, specialty_group)
+    ) |>
+  dplyr::mutate(perc = n * 100 / sum(n), .by = specialty_group) |>
+  dplyr::filter(non_zero_delay == 0) |>
+  dplyr::select(specialty_group, perc)
+```
+
+The average duration of delay in 2024/25 is higher for medical specialty groups compared to surgical and other specialty groups. This is likely due to the smaller percentage of admissions discharged on the discharge ready date for medical specialties. Also, trends for average duration of delay are increasing for medical specialties.
+
+```{r}
+#| label: tbl-scale-specialty_group
+#| tbl-cap: "The number of admissions in 2024/25, the total delay duration and the average duration of delay by month and specialty group."
+mean_delayed_discharge_scale_2425_specialty_group <- targets::tar_read(mean_delayed_discharge_scale_2425_specialty_group)
+
+mean_delayed_discharge_scale_2425_specialty_group |>
+  dplyr::left_join(delayed_discharge_non_zero_specialty_group, "specialty_group") |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::where(is.numeric),
+        ~ format_numbers_for_presentation(.)
+      ),
+      specialty_group = specialty_group |>
+        stringr::str_replace_all("_", " ") |>
+        stringr::str_to_sentence() 
+    ) |>
+  dplyr::select(
+    specialty_group, 
+    number_of_admissions = n,
+    perc_with_zero_delay = perc,
+    total_delay_duration = total,
+    mean
+    ) |>
+  dplyr::rename_with( ~ format_as_title(.)) |>
+  create_flextable()
+```
+
+```{r}
+#| label: fig-scale-specialty_group
+#| fig-cap: "The average duration of delay for hospital admissions by month and specialty group."
+delayed_discharge_specialty_group <- targets::tar_read(delayed_discharge_specialty_group) |>
+  dplyr::mutate(
+     specialty_group = specialty_group |>
+        stringr::str_replace_all("_", " ") |>
+        stringr::str_to_sentence()
+  )
+
+plot_mean_delay_by_month_and_group(delayed_discharge_specialty_group, "specialty_group", "Specialty group")
+```
+
+### By admission method
+
+```{r}
+delayed_discharge_non_zero_pod <- delayed_discharge_non_zero |>
+  dplyr::filter(pod != "other") |>
+  dplyr::summarise(
+    n = sum(count),
+    .by = c(non_zero_delay, pod)
+    ) |>
+  dplyr::mutate(perc = n * 100 / sum(n), .by = pod) |>
+  dplyr::filter(non_zero_delay == 0) |>
+  dplyr::select(pod, perc)
+```
+
+The average duration of delay in 2024/25 is higher for non elective admissions compared to elective admissions. Also, the average duration of delay is increasing over the months for non elective admissions but is more stable for non elective admissions. Elective admissions have a higher percentage of admissions discharged on the discharge ready date compared to non elective admissions.
+
+```{r}
+#| label: tbl-scale-pod
+#| tbl-cap: "The number of admissions in 2024/25, the total delay duration and the average duration of delay by month and point of delivery."
+mean_delayed_discharge_scale_2425_pod <- targets::tar_read(mean_delayed_discharge_scale_2425_pod)
+
+mean_delayed_discharge_scale_2425_pod |>
+  dplyr::left_join(delayed_discharge_non_zero_pod, "pod") |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::where(is.numeric),
+        ~ format_numbers_for_presentation(.)
+      ),
+      pod = pod |>
+        stringr::str_replace_all("_", " ") |>
+        stringr::str_to_sentence() 
+    ) |>
+  dplyr::select(
+    pod, 
+    number_of_admissions = n,
+    perc_with_zero_delay = perc,
+    total_delay_duration = total,
+    mean
+    ) |>
+  dplyr::rename_with( ~ format_as_title(.)) |>
+  create_flextable()
+```
+
+```{r}
+#| label: fig-scale-pod
+#| fig-cap: "The average duration of delay for hospital admissions by month and point of delivery."
+delayed_discharge_pod <- targets::tar_read(delayed_discharge_pod) |>
+  dplyr::mutate(
+     pod = pod |>
+        stringr::str_replace_all("_", " ") |>
+        stringr::str_to_sentence()
+  )
+
+plot_mean_delay_by_month_and_group(delayed_discharge_pod, "pod", "Point of delivery")
+```
+
+### Variation across the country (LAD's)
+
+...
+
+### Key diagnoses for admissions with a delayed discharge
+
+```{r}
+delayed_discharge_top_n <- targets::tar_read(delayed_discharge_top_n)
+
+delayed_discharge_top_n_diagnosis <- delayed_discharge_top_n |>
+  dplyr::filter(type == "diagnosis") |>
+  dplyr::rename(description = diagnosis_description)
+
+delayed_discharge_top_n_procedure <- delayed_discharge_top_n |>
+  dplyr::filter(type == "procedure") |>
+  dplyr::rename(description = procedure_description)
+```
+
+```{r}
+#| label: tbl-top-n-diagnosis-existing
+#| tbl-cap: "The top six primary diagnoses for admissions with a delayed discharge in 2024/25."
+delayed_discharge_top_n_diagnosis |>
+  get_top_n_table()
+```
+
+### Key procedures for admissions with a delayed discharge
+
+```{r}
+#| label: tbl-top-n-procedure-existing
+#| tbl-cap: "The top six primary procedure for admissions with a delayed discharge in 2024/25."
+delayed_discharge_top_n_procedure |>
+  get_top_n_table()
+```
+
+### Overlap with other TPMA
+
+...
+
+Specifically consider overlaps with XSBD and Emergency Admissions of Older People TPMA - potential replacements for.
+
+Efficiency TPMA are most relevant as model will sample from those when double-counting occurs.
+
+## Summary and Recommendations for NHP development board
+
+...

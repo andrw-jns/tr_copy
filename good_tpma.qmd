@@ -1,0 +1,28 @@
+# Characteristics of a good TPMA {.unnumbered}
+
+**1. Clearly defined and measurable**
+
+The TPMA can be identified consistently using reproducible definitions that can be applied to available data.
+
+**2. Grounded in a plausible mitigation opportunity**
+
+The TPMA should represent hospital activity for which there is a credible mechanism through which mitigation could occur (e.g. prevention, substitution, efficiency improvements or de-adoption).
+
+**3. Evidence-informed and intervention-agnostic**
+
+The TPMA should be supported by empirical evidence and/or a well-established theoretical rationale, while not being dependent on any single intervention or service model.
+
+**4. Meaningful**
+
+The TPMA should identify activity for which mitigation would deliver meaningful benefits to patients, providers or the wider health system. As these TPMAs are intended to support strategic planning, they should identify activity of sufficient scale to justify inclusion. 
+
+Where there is substantial overlap with one or more existing TPMAs, and the activity would be modelled using the same type of activity change (e.g. reducing admissions or reducing length of stay), this may indicate duplication rather than a distinct opportunity for mitigation. In such cases, the TPMA should be reviewed to determine whether refinement, consolidation or retirement is appropriate.
+
+**5. Responsive**
+
+The identified activity should be capable of changing in response to realistic improvement efforts, making the TPMA suitable for monitoring over time.
+
+**6. Signal-generating**
+
+The TPMA should produce a meaningful analytical signal. Variation between organisations or over time should be interpretable and sufficiently robust to prompt further investigation, recognising that observed differences may reflect multiple causes and require local interpretation.
+

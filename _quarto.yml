@@ -1,0 +1,45 @@
+project:
+  type: book
+  
+book:
+  title: Review of TPMA indicators for New Hospitals Programme, 2026/27
+  author: Anya Ferguson, Andy Hood, Steven Wyatt, Josh Cook, Charlotte Henderson
+  date: last-modified
+  date-format: "YYYY-MM-DD"
+  chapters:
+    - index.qmd
+    - background.qmd
+    - good_tpma.qmd
+    - part: reviews.qmd
+      chapters:
+      - emer-readm-within-28.qmd
+      - mean-delayed-discharge.qmd
+  page-footer:
+    center:
+      - icon: github
+        href: https://github.com/The-Strategy-Unit/nhp_tpma_review
+    
+title-block-banner: "#f9bf07"
+title-block-banner-color: "#333739"
+
+format:
+  html:
+    smooth-scroll: true
+    theme: cosmo
+    fontcolor: black
+    toc: true
+    toc-location: left
+    toc-title: Summary
+    toc-depth: 3
+    grid:
+      sidebar-width: 250px
+      body-width: 1050px
+      margin-width: 0px
+      gutter-width: 1.5rem
+      
+execute: 
+  echo: false
+  warning: false
+  freeze: auto
+  
+css: styles.css

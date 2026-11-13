@@ -1,0 +1,16 @@
+# Background {.unnumbered}
+
+The New Hospital Programme (NHP) is supporting the development and delivery of major new and redeveloped hospital infrastructure across England. The programme aims to ensure that this investment meets the future needs of the population and represents value for money. 
+
+Estimating future activity levels is a critical early step in planning and designing new hospital facilities. As part of the programme, a large-scale open-source demand and capacity model has been developed to help schemes define and quantify their planning assumptions. A key component of the model allows users to provide estimates about the extent to which specific forms of hospital activity or resource use might be reduced in the future.
+
+To provide a structured way of identifying and modelling these opportunities, a framework of Types of Potentially Mitigable Activity (TPMAs) has been developed. A TPMA is a defined subset of hospital activity for which there is a plausible, evidence-informed opportunity for safe and appropriate mitigation.
+
+To support interpretation and navigation of the model, each TPMA is assigned to a single mechanism representing the principal route through which the identified activity could plausibly be mitigated. Four mechanisms are used:
+
+1.	Prevention – acting upstream to improve population health and reduce the risk of illness or deterioration. 
+2.	De-adoption – reducing or stopping treatments, interventions or activity that are unlikely to provide sufficient benefit to patients. 
+3.	Redirection/substitution – providing care in a different setting, pathway or form where hospital-based care is not required. 
+4.	Efficiency improvements – changing how care is delivered in hospital to reduce the time patients spend there, without changing the underlying need for care. 
+
+The model currently includes 34 TPMAs, comprising 92 individual TPMA definitions when subtypes are included. Individual episodes of hospital activity may be included in multiple TPMAs where different mitigation opportunities are relevant.
